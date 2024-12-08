@@ -1,3 +1,4 @@
 makefile
 chip8
+test_roms/
 .vscode/
