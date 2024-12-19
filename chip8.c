@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <time.h>
 #include "SDL.h"
 
 // SDL Container Object
@@ -18,7 +19,7 @@ typedef struct
     uint32_t fg_color;       // Foreground color 32 bit RGBA8888
     uint32_t bg_color;       // Background color 32 bit RGBA8888
     uint32_t scale_factor;   // Amount to scale a chip8 pixel by
- 
+    bool pixel_outlines;     // Draw pixel outlines yes/no
 } config_t;
 
 // Emulator State Object
@@ -64,6 +65,7 @@ bool set_config_from_args(config_t *config, const int argc, char** argv)
         .fg_color = 0xFFFFFFFF, // White
         .bg_color = 0x000000FF, // Black
         .scale_factor = 20,     // Default res of 64x32 times 20 = 1280x640
+        .pixel_outlines = true,
     };
 
     // Override Defaults from args, todo
@@ -214,6 +216,15 @@ void update_screen(sdl_t sdl, config_t config, chip8_t chip8)
             // If pixel is on, draw the foreground color
             SDL_SetRenderDrawColor(sdl.renderer, fg_r, fg_g, fg_b, fg_a);
             SDL_RenderFillRect(sdl.renderer, &rect);
+
+            // Drawing pixel outlines
+            if(config.pixel_outlines)
+            {
+                SDL_SetRenderDrawColor(sdl.renderer, bg_r, bg_g, bg_b, bg_a);
+                SDL_RenderDrawRect(sdl.renderer, &rect);    
+            }
+            SDL_SetRenderDrawColor(sdl.renderer, bg_r, bg_g, bg_b, bg_a);
+            SDL_RenderDrawRect(sdl.renderer, &rect);
         } else {
             // Else, draw the background color
             SDL_SetRenderDrawColor(sdl.renderer, bg_r, bg_g, bg_b, bg_a);
@@ -285,18 +296,112 @@ void handle_input(chip8_t* chip8)
                     printf("Unimplemented opcode\n");
                 }
                 break;
+            case 0x01:
+                // 1NNN: Jump to address at NNN.
+                printf("PC set to NNN: (0x%04X)\n", chip8->instruction.NNN);
+                break;
             case 0x02:
                 // 0x2NNN: Call Subroutine at NNN:
                 // Store the return point (PC, which has been incremented by 2 to avoid an infinite loop of calling the subroutine and returning to it)
                 // Update the PC to NNN, which is where the subroutine is located
                 printf("Call Subroutine located at 0x%04X\n", chip8->instruction.NNN);
                 break;
-            case 0x0A:
-                printf("Set the Instruction Register I to 0x%04X\n", chip8->instruction.NNN);
+            case 0x03:
+                // 0x3XNN: Skip the next instruction if value in Vx == NN
+                printf("If V%X (0x%02X) is is equal to NN (0x%02X), then skip the next instruction.\n", chip8->instruction.X, 
+                        chip8->V[chip8->instruction.X], chip8->instruction.NN);
+                break;
+            case 0x04:
+                // 0x4XNN: Skips the next instruction if VX does not equal NN
+                printf("If V%X  (0x%02X)is is not equal to NN (0x%02X), then skip the next instruction.\n", chip8->instruction.X, 
+                        chip8->V[chip8->instruction.X], chip8->instruction.NN);
+                break;
+            case 0x05:
+                // 0x5XY0: Skips the next instruction if VX equals VY
+                printf("If V%X  (0x%02X) is equal to V%X (0x%02X), then skip the next instruction.\n", 
+                        chip8->instruction.X, chip8->V[chip8->instruction.X],
+                        chip8->instruction.Y, chip8->V[chip8->instruction.Y]);
                 break;
             case 0x06:
                 // 0x6XNN: Set Register Vx = NN
                 printf("Set Register V%01X to 0x%02X\n", chip8->instruction.X, chip8->instruction.NN);
+                break;
+            case 0x07:
+                // 0x7XNN: Vx += NN. Carry flag is not changed
+                printf("Value NN (0x%02X) was added to register V%X, which had initial value 0x%02X\n",
+                        chip8->instruction.NN, chip8->instruction.X, chip8->V[chip8->instruction.X]);
+                break;
+            case 0x08:
+                switch(chip8->instruction.N)
+                {
+                    case 0:
+                        // 0x8XY0: Set the value of Vx equal to the value of Vy
+                        printf("Value of V%X set to value of V%X (0x%02X)\n", chip8->instruction.X, chip8->instruction.Y,
+                                chip8->V[chip8->instruction.Y]); 
+                        break;
+                    case 1:
+                        // 0x8XY1: Set Vx to Vx | Vy (Bitwise OR)
+                        printf("Set V%X to bitwise OR with V%X (0x%02X)\n", chip8->instruction.X, chip8->instruction.Y,
+                                chip8->V[chip8->instruction.Y]);
+                        break;
+                    case 2:
+                        // 0x8XY1: Set Vx to Vx & Vy (Bitwise AND)
+                        printf("Set V%X to bitwise AND with V%X (0x%02X)\n", chip8->instruction.X, chip8->instruction.Y,
+                                chip8->V[chip8->instruction.Y]);
+                        break;
+                    case 3:
+                        // 0x8XY3: Set Vx to Vx ^ Vy (Bitwise XOR)
+                        printf("Set V%X to bitwise XOR with V%X (0x%02X)\n", chip8->instruction.X, chip8->instruction.Y,
+                                chip8->V[chip8->instruction.Y]);
+                        break;
+                    case 4:
+                        // 08XY4: Add Vy to Vx. Set VF to 1 if overflow occurs, else set it to 0
+                        printf("V%X (0x%02X) += V%X (0x%02X)\n"
+                                , chip8->instruction.X, chip8->V[chip8->instruction.X]
+                                , chip8->instruction.Y, chip8->V[chip8->instruction.Y]);
+                        break;
+                    case 5:
+                        // 0x8XY5: Subtract Vy from Vx. Set VF to 1 when no underflow occurs, and 0 when there is underflow
+                        printf("V%X (0x%02X) -= V%X (0x%02X)\n"
+                                , chip8->instruction.X, chip8->V[chip8->instruction.X]
+                                , chip8->instruction.Y, chip8->V[chip8->instruction.Y]);
+                        break;
+                    case 6:
+                        // 0x8XY6: Shift VX to the right by 1, then store the least significant bit of VX prior to the shift into VF
+                        printf("Right shift V%X (0x%02X) by 1 bit\n", chip8->instruction.X, chip8->V[chip8->instruction.X]);
+                        break;
+                    case 7:
+                        // 0x8XY7: Set VX to VY minus VX. VF is set to 0 when there is an underflow, and 1 when there is not.
+                        printf("V%X (0x%02X) = V%X (0x%02X) - V%X\n"
+                                , chip8->instruction.X, chip8->V[chip8->instruction.X]
+                                , chip8->instruction.Y, chip8->V[chip8->instruction.Y]
+                                , chip8->instruction.X);
+                        break;
+                    case 0xE: 
+                        // 0x8XYE: Shift VX to the left by 1. Set VF to 1 if the MSB of VX prior to that shift was set, or to 0 if it was unset.
+                        printf("Left shift V%X (0x%02X) by 1 bit\n", chip8->instruction.X, chip8->V[chip8->instruction.X]);
+                        break;
+                    default:
+                        break; // unimplemented or invalid opcode
+                }
+                break;
+            case 0x09:
+                // 0x9XY0: Skips the next instruction if VX != VY
+                printf("If V%X  (0x%02X) is not equal to V%X (0x%02X), then skip the next instruction.\n", 
+                        chip8->instruction.X, chip8->V[chip8->instruction.X],
+                        chip8->instruction.Y, chip8->V[chip8->instruction.Y]);
+                break;
+            case 0x0A:
+                printf("Set the Instruction Register I to 0x%04X\n", chip8->instruction.NNN);
+                break;
+            case 0x0B:
+                // 0xBNNN: Jump to the address at V0 + NNN
+                printf("Set PC to V0 (0x%02X) + NNN (0x%04X) = 0x%04X\n", chip8->V[0], chip8->instruction.NNN, 
+                                                                        chip8->V[0] + chip8->instruction.NNN);
+                break;
+            case 0x0C:
+                // 0xCXNN: Set register Vx to NN & rand(0, 255)
+                printf("Set register V%X to NN(0x%02X) & (rand() mod 256)\n", chip8->instruction.X, chip8->instruction.NN);
                 break;
             case 0x0D:
                 // 0xDXYN: Draw pixel Vx, Vy, heignt N and width 8
@@ -304,10 +409,18 @@ void handle_input(chip8_t* chip8)
                         chip8->instruction.N, chip8->instruction.X, chip8->V[chip8->instruction.X], 
                                               chip8->instruction.Y, chip8->V[chip8->instruction.Y], chip8->I);
                 break;
-            case 0x07:
-                // 0x7XNN: Vx += NN. Carry flag is not changed
-                printf("Value NN (0x%02X) was added to register V%X, which had initial value 0x%02X\n",
-                        chip8->instruction.NN, chip8->instruction.X, chip8->V[chip8->instruction.X]);
+            case 0x0E:
+                if(chip8->instruction.NN == 0x9E) 
+                {
+                    //0xEX9E: Skip the next instruction if the key is pressed:
+                    printf("Skip next instruction if key stored in V%X (%X) is being pressed %d\n", 
+                            chip8->instruction.X, chip8->V[chip8->instruction.X], chip8->keypad[chip8->V[chip8->instruction.X]]);
+
+                } else if (chip8->instruction.NN == 0xA1) {
+                    //0xEXA1: Skip the next instruction if the key is not pressed:
+                    printf("Skip next instruction if key stored in V%X (%X) is  not being pressed %d\n", 
+                            chip8->instruction.X, chip8->V[chip8->instruction.X], chip8->keypad[chip8->V[chip8->instruction.X]]);
+                }
                 break;
             default:
                 printf("Unimplemented opcode\n");
@@ -319,6 +432,8 @@ void handle_input(chip8_t* chip8)
 // Emulate 1 CHIP8 instruction
 void emulate_instruction(chip8_t* chip8, const config_t config)
 {
+    bool carry;
+
     (chip8->instruction).opcode = (chip8->ram[chip8->PC] << 8) | (chip8->ram[chip8->PC + 1]);
     chip8->PC += 2; // Increment PC for the next opcode
 
@@ -347,6 +462,10 @@ void emulate_instruction(chip8_t* chip8, const config_t config)
                 chip8->PC = *--chip8->stack_pointer;
             }
             break;
+        case 0x01:
+            // 1NNN: Jump to address at NNN.
+            chip8->PC = chip8->instruction.NNN;
+            break;
         case 0x02:
             // 0x2NNN: Call Subroutine at NNN:
             // Store the return point (PC, which has been incremented by 2 to avoid an infinite loop of calling the subroutine and returning to it)
@@ -354,13 +473,106 @@ void emulate_instruction(chip8_t* chip8, const config_t config)
             *chip8->stack_pointer++ = chip8->PC;
             chip8->PC = chip8->instruction.NNN;
             break;
-        case 0x0A:
-            // 0xANNN: Sets I to the address NNN. I: Instruction Register
-            chip8->I = chip8->instruction.NNN;
+        case 0x03:
+            // 0x3XNN: Skip the next instruction if value in Vx == NN
+            if(chip8->V[chip8->instruction.X] == chip8->instruction.NN)
+            {
+                chip8->PC += 2;
+            }
+            break;
+        case 0x04:
+            // 0x4XNN: Skips the next instruction if VX does not equal NN
+            if(chip8->V[chip8->instruction.X] != chip8->instruction.NN)
+            {
+                chip8->PC += 2;
+            }
+            break;
+        case 0x05:
+            // 0x5XY0: Skips the next instruction if VX equals VY
+            if(chip8->V[chip8->instruction.X] == chip8->V[chip8->instruction.Y])
+            {
+                chip8->PC += 2;
+            }
             break;
         case 0x06:
             // 0x6XNN: Set Register Vx = NN
             chip8->V[chip8->instruction.X] = chip8->instruction.NN;
+            break;
+        case 0x07:
+            // 0x7XNN: Vx += NN. Carry flag is not changed
+            chip8->V[chip8->instruction.X] += chip8->instruction.NN;
+            break;
+        case 0x08:
+            switch(chip8->instruction.N)
+            {
+                case 0:
+                    // 0x8XY0: Set the value of Vx equal to the value of Vy
+                    chip8->V[chip8->instruction.X] = chip8->V[chip8->instruction.Y]; 
+                    break;
+                case 1:
+                    // 0x8XY1: Set Vx to Vx | Vy (Bitwise OR)
+                    chip8->V[chip8->instruction.X] |= chip8->V[chip8->instruction.Y];
+                    break;
+                case 2:
+                    // 0x8XY1: Set Vx to Vx & Vy (Bitwise AND)
+                    chip8->V[chip8->instruction.X] &= chip8->V[chip8->instruction.Y];
+                    break;
+                case 3:
+                    // 0x8XY3: Set Vx to Vx ^ Vy (Bitwise XOR)
+                    chip8->V[chip8->instruction.X] ^= chip8->V[chip8->instruction.Y];
+                    break;
+                case 4:
+                    // 08XY4: Add Vy to Vx. Set VF to 1 if overflow occurs, else set it to 0
+                    chip8->V[chip8->instruction.X] += chip8->V[chip8->instruction.Y];
+                    carry = (chip8->V[chip8->instruction.X] + chip8->V[chip8->instruction.Y]) > 255;
+                    chip8->V[0xF] = carry;
+                    break;
+                case 5:
+                    // 0x8XY5: Subtract Vy from Vx. Set VF to 1 when no underflow occurs, and 0 when there is underflow
+                    chip8->V[chip8->instruction.X] -= chip8->V[chip8->instruction.Y];
+                    carry = chip8->V[chip8->instruction.Y] <= chip8->V[chip8->instruction.X]; // No underflow
+                    chip8->V[0xF] = carry;
+                    break;
+                case 6:
+                    // 0x8XY6: Shift VX to the right by 1, then store the least significant bit of VX prior to the shift into VF
+                    carry = chip8->V[chip8->instruction.X] & 1;
+                    chip8->V[chip8->instruction.X] >>= 1;
+                    chip8->V[0xF] = carry;
+                    break;
+                case 7:
+                    // 0x8XY7: Set VX to VY minus VX. VF is set to 0 when there is an underflow, and 1 when there is not.
+                    chip8->V[chip8->instruction.X] = chip8->V[chip8->instruction.Y] - chip8->V[chip8->instruction.X];
+                    carry = chip8->V[chip8->instruction.X] <= chip8->V[chip8->instruction.Y]; // No underflow
+                    chip8->V[0xF] = carry;
+                    break;
+                case 0xE: 
+                    // 0x8XYE: Shift VX to the left by 1. Set VF to 1 if the MSB of VX prior to that shift was set, or to 0 if it was unset.
+                    carry = chip8->V[chip8->instruction.X] >> 7;
+                    chip8->V[0xF] = carry;
+                    chip8->V[chip8->instruction.X] <<= 1;
+                    break;
+                default:
+                    break; // unimplemented or invalid opcode
+            }
+            break;
+        case 0x09:
+            // 0x9XY0: Skips the next instruction if VX != VY
+            if(chip8->V[chip8->instruction.X] != chip8->V[chip8->instruction.Y])
+            {
+                chip8->PC += 2;
+            }
+            break;
+        case 0x0A:
+            // 0xANNN: Sets I to the address NNN. I: Instruction Register
+            chip8->I = chip8->instruction.NNN;
+            break;
+        case 0x0B:
+            // 0xBNNN: Jump to the address at V0 + NNN
+            chip8->PC = chip8->V[0] + chip8->instruction.NNN;
+            break;
+        case 0x0C:
+            // 0xCXNN: Set register Vx to NN & rand(0, 255)
+            chip8->V[chip8->instruction.X] = (rand() % 256) & chip8->instruction.NN;
             break;
         case 0x0D:
             // 0xDXYN: Draw a sprite at (Vx, Vy), of height N and width 8 pixels
@@ -399,9 +611,22 @@ void emulate_instruction(chip8_t* chip8, const config_t config)
                 if(++Y_coord >= config.window_height) break;
             }
             break;
-        case 0x07:
-            // 0x7XNN: Vx += NN. Carry flag is not changed
-            chip8->V[chip8->instruction.X] += chip8->instruction.NN;
+        case 0x0E:
+            if(chip8->instruction.NN == 0x9E) 
+            {
+                //0xEX9E: Skip the next instruction if the key is pressed:
+                if(chip8->keypad[chip8->V[chip8->instruction.X]])
+                {
+                    chip8->PC += 2;
+                }
+
+            } else if (chip8->instruction.NN == 0xA1) {
+                //0xEXA1: Skip the next instruction if the key is not pressed:
+                if(!chip8->keypad[chip8->V[chip8->instruction.X]])
+                {
+                    chip8->PC += 2;
+                }
+            }
             break;
         default:
             break; // Uninimplemented / invalid opcode
@@ -433,6 +658,9 @@ int main(int argc, char** argv)
 
     // Initial Screen Clear
     clear_screen(sdl, config);
+
+    // Set seed for rand()
+    srand(time(NULL));
 
     // Emulator loop
     while (chip8.state != QUIT)
