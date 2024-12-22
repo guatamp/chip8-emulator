@@ -265,11 +265,47 @@ void handle_input(chip8_t* chip8)
                             chip8->state = RUNNING;
                         }
                         return;
-                    default: 
-                        break;
+                    
+                    case SDLK_1: chip8->keypad[0x1] = true; break; // 1
+                    case SDLK_2: chip8->keypad[0x2] = true; break; // 2
+                    case SDLK_3: chip8->keypad[0x3] = true; break; // 3
+                    case SDLK_4: chip8->keypad[0xC] = true; break; // C
+                    case SDLK_q: chip8->keypad[0x4] = true; break; // 4
+                    case SDLK_w: chip8->keypad[0x5] = true; break; // 5
+                    case SDLK_e: chip8->keypad[0x6] = true; break; // 6
+                    case SDLK_r: chip8->keypad[0xC] = true; break; // D
+                    case SDLK_a: chip8->keypad[0x7] = true; break; // 7
+                    case SDLK_s: chip8->keypad[0x8] = true; break; // 8
+                    case SDLK_d: chip8->keypad[0x9] = true; break; // 9
+                    case SDLK_f: chip8->keypad[0xE] = true; break; // E
+                    case SDLK_z: chip8->keypad[0xA] = true; break; // A
+                    case SDLK_x: chip8->keypad[0x0] = true; break; // 0
+                    case SDLK_c: chip8->keypad[0xB] = true; break; // B
+                    case SDLK_v: chip8->keypad[0xF] = true; break; // F
+                    default: break;
                 }
                 break;
             case SDL_KEYUP:
+                switch(event.key.keysym.sym)
+                {
+                    case SDLK_1: chip8->keypad[0x1] = false; break; // 1
+                    case SDLK_2: chip8->keypad[0x2] = false; break; // 2
+                    case SDLK_3: chip8->keypad[0x3] = false; break; // 3
+                    case SDLK_4: chip8->keypad[0xC] = false; break; // C
+                    case SDLK_q: chip8->keypad[0x4] = false; break; // 4
+                    case SDLK_w: chip8->keypad[0x5] = false; break; // 5
+                    case SDLK_e: chip8->keypad[0x6] = false; break; // 6
+                    case SDLK_r: chip8->keypad[0xC] = false; break; // D
+                    case SDLK_a: chip8->keypad[0x7] = false; break; // 7
+                    case SDLK_s: chip8->keypad[0x8] = false; break; // 8
+                    case SDLK_d: chip8->keypad[0x9] = false; break; // 9
+                    case SDLK_f: chip8->keypad[0xE] = false; break; // E
+                    case SDLK_z: chip8->keypad[0xA] = false; break; // A
+                    case SDLK_x: chip8->keypad[0x0] = false; break; // 0
+                    case SDLK_c: chip8->keypad[0xB] = false; break; // B
+                    case SDLK_v: chip8->keypad[0xF] = false; break; // F
+                    default: break;
+                }
                 break;
             default:
                 break;
@@ -382,6 +418,7 @@ void handle_input(chip8_t* chip8)
                         printf("Left shift V%X (0x%02X) by 1 bit\n", chip8->instruction.X, chip8->V[chip8->instruction.X]);
                         break;
                     default:
+                        printf("Unimplemented Opcode");
                         break; // unimplemented or invalid opcode
                 }
                 break;
@@ -420,6 +457,59 @@ void handle_input(chip8_t* chip8)
                     //0xEXA1: Skip the next instruction if the key is not pressed:
                     printf("Skip next instruction if key stored in V%X (%X) is  not being pressed %d\n", 
                             chip8->instruction.X, chip8->V[chip8->instruction.X], chip8->keypad[chip8->V[chip8->instruction.X]]);
+                }
+                break;
+            case 0x0F:
+                switch(chip8->instruction.NN)
+                {
+                    case 0x0A:
+                        // 0xFX0A: A key press is awaited, and then stored in in Vx (Blocking operation, all instructions halted until next key event)
+                        printf("Wait until a key is pressed, store key in V%X\n", chip8->instruction.X);
+                        break;
+                    case 0x07:
+                        // 0xFX07: Set Vx to the value of the delay timer
+                        printf("Set value of V%X to the value of the delay timer (0x%X)\n", chip8->instruction.X, chip8->delay_timer);
+                        break;
+                    case 0x15:
+                        // 0xFX15: Set the delay timer to value of Vx
+                        printf("Set the value of the delay timer to V%X (0x%02X)\n", chip8->instruction.X, chip8->V[chip8->instruction.X]);
+                        break;
+                    case 0x18:
+                        // 0xFX18: Set the sound timer to the value of Vx
+                        printf("Set the value of the sound timer to V%X (0x%02X)\n", chip8->instruction.X, chip8->V[chip8->instruction.X]);
+                        break;
+                    case 0x1E:
+                        // 0xFX1E: Add Vx to I ie I += Vx
+                        printf("Increment I (0x%04X) by V%X (%02X) = 0x%04X\n",
+                                chip8->I, chip8->instruction.X, chip8->V[chip8->instruction.X], chip8->I + chip8->V[chip8->instruction.X]);
+                        break;
+                    case 0x29:
+                        // 0xFX29: Set I to the location of the sprite for the character in Vx
+                        // Vx has 0x0 - 0xF so it is the sprite for one of those characters
+                        // Font is stored at start of RAM.
+                        // So offset into RAM by 5 * Vx
+                        printf("Set I to sprite location in memory for character in V%X =  (0x%02X) * 5\n", 
+                                chip8->instruction.X, chip8->V[chip8->instruction.X]);
+                        break;
+                    case 0x33:
+                        // 0xFX33: Stores the binary-coded decimal representation of VX, 
+                        // with the hundreds digit in memory at location in I, the tens digit at location I+1, and the ones digit at location I+2.
+                        printf("Store BCD representation of V%X (%02X) at memory offset in I (0x%04X)\n",
+                                chip8->instruction.X, chip8->V[chip8->instruction.X], chip8->I );
+                        break;
+                    case 0x55:
+                        // 0xFX55: Store V0 to VX in ram location starting at location in I.
+                        printf("Reg dump V0 to V%X (inclusive) in ram location starting at I (0x%04X)\n", 
+                                chip8->instruction.X, chip8->I);
+                        break;
+                    case 0x65:
+                        // 0xFX65: Store V0 to VX in ram location starting at location in I.
+                        printf("Reg load ram location starting at I (0x%04X) into V0 to V%X (inclusive)\n", 
+                                chip8->I, chip8->instruction.X);
+                        break;
+                    default:
+                        printf("Unimplemented opcode\n");
+                        break;
                 }
                 break;
             default:
@@ -530,7 +620,7 @@ void emulate_instruction(chip8_t* chip8, const config_t config)
                 case 5:
                     // 0x8XY5: Subtract Vy from Vx. Set VF to 1 when no underflow occurs, and 0 when there is underflow
                     chip8->V[chip8->instruction.X] -= chip8->V[chip8->instruction.Y];
-                    carry = chip8->V[chip8->instruction.Y] <= chip8->V[chip8->instruction.X]; // No underflow
+                    carry = chip8->V[chip8->instruction.Y] >= chip8->V[chip8->instruction.X]; // No underflow
                     chip8->V[0xF] = carry;
                     break;
                 case 6:
@@ -626,6 +716,78 @@ void emulate_instruction(chip8_t* chip8, const config_t config)
                 {
                     chip8->PC += 2;
                 }
+            }
+            break;
+        case 0x0F:
+            switch(chip8->instruction.NN)
+            {
+                case 0x0A:
+                    // 0xFX0A: A key press is awaited, and then stored in in Vx (Blocking operation, all instructions halted until next key event)
+                    bool any_key_pressed = false;
+                    for(uint8_t i = 0; i < sizeof chip8->keypad; i++)
+                    {
+                        if(chip8->keypad[i])
+                        {
+                            chip8->V[chip8->instruction.X] = i;
+                            any_key_pressed = true;
+                            break;
+                        }
+
+                        if(!any_key_pressed)
+                        {
+                            chip8->PC -= 2; // Repeat this instruction
+                        }
+                    }
+                    break;
+                case 0x07:
+                    // 0xFX07: Set Vx to the value of the delay timer
+                    chip8->V[chip8->instruction.X] = chip8->delay_timer;
+                    break;
+                case 0x15:
+                    // 0xFX15: Set the delay timer to value of Vx
+                    chip8->delay_timer = chip8->V[chip8->instruction.X];
+                    break;
+                case 0x18:
+                    // 0xFX18: Set the sound timer to the value of Vx
+                    chip8->sound_timer = chip8->V[chip8->instruction.X];
+                    break;
+                case 0x1E:
+                    // 0xFX1E: Add Vx to I ie I += Vx
+                    chip8->I += chip8->V[chip8->instruction.X];
+                    break;
+                case 0x29:
+                    // 0xFX29: Set I to the location of the sprite for the character in Vx
+                    // Vx has 0x0 - 0xF so it is the sprite for one of those characters
+                    // Font is stored at start of RAM.
+                    // So offset into RAM by 5 * Vx
+                    chip8->I = chip8->V[chip8->instruction.X] * 5;
+                    break;
+                case 0x33:
+                    // 0xFX33: Stores the binary-coded decimal representation of VX, 
+                    // with the hundreds digit in memory at location in I, the tens digit at location I+1, and the ones digit at location I+2.
+                    uint8_t bcd = chip8->V[chip8->instruction.X]; 
+                    chip8->ram[chip8->I+2] = bcd % 10;
+                    bcd /= 10;
+                    chip8->ram[chip8->I+1] = bcd % 10;
+                    bcd /= 10;
+                    chip8->ram[chip8->I] = bcd;
+                    break;
+                case 0x55:
+                    // 0xFX55: Reg dump V0 to VX in ram location starting at location in I.
+                    for(uint8_t i = 0; i <= chip8->instruction.X; i++)
+                    {
+                        chip8->ram[chip8->I + i] = chip8->V[i];
+                    }
+                    break;
+                case 0x65:
+                    // 0xFX65: Reg load starting from ram location in I into V0 to VX in.
+                    for(uint8_t i = 0; i <= chip8->instruction.X; i++)
+                    {
+                        chip8->V[i] = chip8->ram[chip8->I + i];
+                    }
+                    break;
+                default: 
+                    break;
             }
             break;
         default:
