@@ -16,10 +16,11 @@ typedef struct
 {
     uint32_t window_width;
     uint32_t window_height;
-    uint32_t fg_color;       // Foreground color 32 bit RGBA8888
-    uint32_t bg_color;       // Background color 32 bit RGBA8888
-    uint32_t scale_factor;   // Amount to scale a chip8 pixel by
-    bool pixel_outlines;     // Draw pixel outlines yes/no
+    uint32_t fg_color;                // Foreground color 32 bit RGBA8888
+    uint32_t bg_color;                // Background color 32 bit RGBA8888
+    uint32_t scale_factor;            // Amount to scale a chip8 pixel by
+    bool pixel_outlines;              // Draw pixel outlines yes/no
+    uint32_t instructions_per_second; // CHIP8 CPU Clock Rate
 } config_t;
 
 // Emulator State Object
@@ -66,6 +67,7 @@ bool set_config_from_args(config_t *config, const int argc, char** argv)
         .bg_color = 0x000000FF, // Black
         .scale_factor = 20,     // Default res of 64x32 times 20 = 1280x640
         .pixel_outlines = true,
+        .instructions_per_second = 500,
     };
 
     // Override Defaults from args, todo
@@ -391,7 +393,7 @@ void handle_input(chip8_t* chip8)
                                 chip8->V[chip8->instruction.Y]);
                         break;
                     case 4:
-                        // 08XY4: Add Vy to Vx. Set VF to 1 if overflow occurs, else set it to 0
+                        // 0x8XY4: Add Vy to Vx. Set VF to 1 if overflow occurs, else set it to 0
                         printf("V%X (0x%02X) += V%X (0x%02X)\n"
                                 , chip8->instruction.X, chip8->V[chip8->instruction.X]
                                 , chip8->instruction.Y, chip8->V[chip8->instruction.Y]);
@@ -612,15 +614,15 @@ void emulate_instruction(chip8_t* chip8, const config_t config)
                     chip8->V[chip8->instruction.X] ^= chip8->V[chip8->instruction.Y];
                     break;
                 case 4:
-                    // 08XY4: Add Vy to Vx. Set VF to 1 if overflow occurs, else set it to 0
-                    chip8->V[chip8->instruction.X] += chip8->V[chip8->instruction.Y];
+                    // 0x8XY4: Add Vy to Vx. Set VF to 1 if overflow occurs, else set it to 0
                     carry = (chip8->V[chip8->instruction.X] + chip8->V[chip8->instruction.Y]) > 255;
+                    chip8->V[chip8->instruction.X] += chip8->V[chip8->instruction.Y];
                     chip8->V[0xF] = carry;
                     break;
                 case 5:
                     // 0x8XY5: Subtract Vy from Vx. Set VF to 1 when no underflow occurs, and 0 when there is underflow
+                    carry = chip8->V[chip8->instruction.Y] <= chip8->V[chip8->instruction.X]; // No underflow
                     chip8->V[chip8->instruction.X] -= chip8->V[chip8->instruction.Y];
-                    carry = chip8->V[chip8->instruction.Y] >= chip8->V[chip8->instruction.X]; // No underflow
                     chip8->V[0xF] = carry;
                     break;
                 case 6:
@@ -631,8 +633,8 @@ void emulate_instruction(chip8_t* chip8, const config_t config)
                     break;
                 case 7:
                     // 0x8XY7: Set VX to VY minus VX. VF is set to 0 when there is an underflow, and 1 when there is not.
-                    chip8->V[chip8->instruction.X] = chip8->V[chip8->instruction.Y] - chip8->V[chip8->instruction.X];
                     carry = chip8->V[chip8->instruction.X] <= chip8->V[chip8->instruction.Y]; // No underflow
+                    chip8->V[chip8->instruction.X] = chip8->V[chip8->instruction.Y] - chip8->V[chip8->instruction.X];
                     chip8->V[0xF] = carry;
                     break;
                 case 0xE: 
@@ -672,7 +674,7 @@ void emulate_instruction(chip8_t* chip8, const config_t config)
             uint8_t X_coord = chip8->V[chip8->instruction.X] % config.window_width;
             uint8_t Y_coord = chip8->V[chip8->instruction.Y] % config.window_height;
             const uint8_t orig_X = X_coord;
-            //chip8->V[0xF] = 0; // Carry flag initialized to 0
+            chip8->V[0xF] = 0; // Carry flag initialized to 0
             // Loop over the N rows of the sprite to be drawn
             for(uint8_t i = 0; i < chip8->instruction.N; i++)
             {
@@ -796,6 +798,19 @@ void emulate_instruction(chip8_t* chip8, const config_t config)
 
 }
 
+void update_timers(chip8_t *chip8)
+{
+    if(chip8->delay_timer > 0) chip8->delay_timer--;
+    
+    if(chip8->sound_timer > 0)
+    { 
+        chip8->sound_timer--;
+        // TODO: Play sound
+    } else {
+        // Stop playing sound
+    }
+}
+
 int main(int argc, char** argv) 
 {
     // Default usage message for args
@@ -833,16 +848,26 @@ int main(int argc, char** argv)
         if(chip8.state == PAUSED) continue;
 
         // get_time()
-        // Emulate CHIP8 Instructions
-        emulate_instruction(&chip8, config);
-        // time elapsed since get_time()
+        const uint64_t start = SDL_GetPerformanceCounter();
 
+        // Emulate CHIP8 Instructions for this Emulator "Frame"
+        // Number of instructions per frame = number of instructions per second / frame rate
+        for(uint32_t i = 0; i < (config.instructions_per_second) / 60; i++)
+        {
+            emulate_instruction(&chip8, config);
+        }
+
+        // time elapsed since get_time()
+        const uint64_t end = SDL_GetPerformanceCounter();
+        
         // Delay for 60fps (approximatley)
+        const uint64_t time_elapsed = (double) ((end - start) * 1000) / (SDL_GetPerformanceCounter());
         // SDL_Delay(16 - time elapsed)
-        SDL_Delay(16);
+        SDL_Delay(16.67f > time_elapsed ? 16.67f - time_elapsed : 0);
 
         // Update the screen with changes
         update_screen(sdl, config, chip8);
+        update_timers(&chip8);
     }
 
     // Cleanup and Exit
