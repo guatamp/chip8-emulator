@@ -1,6 +1,22 @@
 #include "sdl_config.h"
 
-bool init_sdl(sdl_t *sdl, const config_t config) 
+void audio_callback(void* userdata, uint8_t *stream, int len)
+{
+    config_t *config = (config_t *)&userdata;
+
+    // Fill out stream/audio buffer with data
+    int16_t *audio_data = (int16_t *)userdata;
+    static uint32_t running_sample_index = 0;
+    const int32_t square_wave_period = config->audio_sample_rate / config->square_wave_frequency;
+    const int32_t half_square_wave_period = square_wave_period / 2;
+
+    for(int i = 0; i < len / 2; i++)
+    {
+        audio_data[i] = ((running_sample_index++ / half_square_wave_period) % 2) ? config->volume : -config->volume;
+    }
+}
+
+bool init_sdl(sdl_t *sdl, config_t *config) 
 {
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER) != 0) 
     {
@@ -9,8 +25,8 @@ bool init_sdl(sdl_t *sdl, const config_t config)
     }
 
     sdl->window = SDL_CreateWindow("CHIP8 EMULATOR", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 
-                                    config.window_width * config.scale_factor, 
-                                    config.window_height * config.scale_factor,
+                                    config->window_width * config->scale_factor, 
+                                    config->window_height * config->scale_factor,
                                     0);
 
     if(!sdl->window)
@@ -26,6 +42,30 @@ bool init_sdl(sdl_t *sdl, const config_t config)
         return false;
     }
 
+    // Initialize Audio:
+    sdl->want = (SDL_AudioSpec){
+        .freq = 44100,
+        .format = AUDIO_S16LSB, // Signed 16 bit little endian audio
+        .channels = 1,
+        .samples = 4096,
+        .callback = audio_callback,
+        .userdata = &config,
+    };
+
+    sdl->dev = SDL_OpenAudioDevice(NULL, 0, &sdl->want, &sdl->have, 0);
+
+    if(sdl->dev == 0)
+    {
+        SDL_Log("Could not create Audio Device, %s\n", SDL_GetError());
+        return false;   
+    }
+
+    if((sdl->want.format != sdl->have.format) || (sdl->want.channels != sdl->have.channels))
+    {
+        SDL_Log("Could not create desired Audio Spec\n");
+        return false;
+    }
+
     return true;
 }
 
@@ -33,6 +73,7 @@ void final_cleanup(const sdl_t sdl)
 {
     SDL_DestroyRenderer(sdl.renderer);
     SDL_DestroyWindow(sdl.window);
+    SDL_CloseAudioDevice(sdl.dev);
     SDL_Quit(); // Clean up all initialized subsystems
 }
 

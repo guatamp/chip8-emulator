@@ -18,7 +18,7 @@ int main(int argc, char** argv)
     
     // Initialize SDL
     sdl_t sdl = {0};
-    if(!init_sdl(&sdl, config)) exit(EXIT_FAILURE);
+    if(!init_sdl(&sdl, &config)) exit(EXIT_FAILURE);
 
     // Initialize CHIP8 machine
     chip8_t chip8 = {0};
@@ -59,7 +59,7 @@ int main(int argc, char** argv)
 
         // Update the screen with changes
         update_screen(sdl, config, chip8);
-        update_timers(&chip8);
+        update_timers(sdl, &chip8);
     }
 
     // Cleanup and Exit

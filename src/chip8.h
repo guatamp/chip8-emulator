@@ -19,6 +19,9 @@ typedef struct
     uint32_t scale_factor;            // Amount to scale a chip8 pixel by
     bool pixel_outlines;              // Draw pixel outlines yes/no
     uint32_t instructions_per_second; // CHIP8 CPU Clock Rate
+    uint32_t square_wave_frequency;   // Frequency of square wave sound to be played
+    uint32_t audio_sample_rate;       
+    int16_t volume;
 } config_t;
 
 // CHIP8 Instruction Format
@@ -50,4 +53,4 @@ typedef struct {
 
 bool set_config_from_args(config_t *config, const int argc, char** argv);
 bool init_chip8(chip8_t *chip8, const char rom_name[]);
-void update_timers(chip8_t *chip8);
+void update_timers(const sdl_t sdl, chip8_t *chip8);

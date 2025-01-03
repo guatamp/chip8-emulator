@@ -11,6 +11,9 @@ bool set_config_from_args(config_t *config, const int argc, char** argv)
         .scale_factor = 25,     // Default res of 64x32 times 20 = 1280x640
         .pixel_outlines = true,
         .instructions_per_second = 500,
+        .audio_sample_rate = 44100,
+        .square_wave_frequency = 440,
+        .volume = 2500,
     };
 
     // Override Defaults from args, todo
@@ -85,15 +88,15 @@ bool init_chip8(chip8_t *chip8, const char rom_name[])
     return true;
 }
 
-void update_timers(chip8_t *chip8)
+void update_timers(const sdl_t sdl, chip8_t *chip8)
 {
     if(chip8->delay_timer > 0) chip8->delay_timer--;
     
     if(chip8->sound_timer > 0)
     { 
         chip8->sound_timer--;
-        // TODO: Play sound
+        SDL_PauseAudioDevice(sdl.dev, 0); // Play sound
     } else {
-        // Stop playing sound
+        SDL_PauseAudioDevice(sdl.dev, 1); // Pause sound
     }
 }
